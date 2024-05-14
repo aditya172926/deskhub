@@ -1,10 +1,10 @@
 use crate::api::{make_get_request, make_post_request};
 use crate::models::{
-    APIResult, AuthState, AuthTokens, Commit, Gist, GistInput, GithubUser, NewGistResponse,
-    Repository, URL,
+    APIResult, ApiRequest, AuthState, AuthTokens, Commit, Gist, GistInput, GithubUser, NewGistResponse, Repository, URL
 };
 use serde_json::Value;
 use std::collections::HashMap;
+use std::thread;
 use tauri::State;
 
 #[tauri::command]
@@ -124,28 +124,24 @@ pub async fn generate_new_window(
 
 #[tauri::command]
 pub fn call_api_method(
-    method: String,
-    url: String,
+    request: ApiRequest,
     token: Option<&str>,
-    query: Option<HashMap<String, String>>,
-    data: Option<serde_json::Value>,
-    headers: Option<HashMap<String, String>>,
 ) -> APIResult<serde_json::Value> {
-    let endpoint: String = match query {
+    let endpoint: String = match request.query {
         Some(object) => {
             let mut query_params: String = String::new();
             for (key, value) in object.into_iter() {
                 query_params = format!("{}{}={}&", query_params, key, value);
             }
-            let url = format!("{}?{}", url, query_params);
-            url
+            let url = format!("{}?{}", request.url, query_params);
+            url 
         }
-        None => url,
+        None => request.url,
     };
 
-    if method == "POST".to_string() {
+    if request.method == "POST".to_string() {
         let response: serde_json::Value =
-            match make_post_request(URL::WithoutBaseUrl(endpoint), token, data, headers) {
+            match make_post_request(URL::WithoutBaseUrl(endpoint), token, request.body, request.headers) {
                 Ok(result) => serde_json::to_value(result).unwrap(),
                 Err(error) => {
                     println!("Error in POST request {:?}", error);
@@ -155,7 +151,7 @@ pub fn call_api_method(
         Ok(response)
     } else {
         let response: serde_json::Value =
-            match make_get_request(URL::WithoutBaseUrl(endpoint), token, headers) {
+            match make_get_request(URL::WithoutBaseUrl(endpoint), token, request.headers) {
                 Ok(result) => serde_json::to_value(&result).unwrap(),
                 Err(error) => {
                     println!("Error in GET request {:?}", error);
